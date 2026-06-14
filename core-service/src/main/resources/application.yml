@@ -1,0 +1,42 @@
+server:
+  port: 8082
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: core-service
+  main:
+    allow-bean-definition-overriding: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/iatech_core
+    username: postgres
+    password: password
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+  cloud:
+    config:
+      enabled: false
+
+# Configuration du stockage (utilisée par FileStorageService)
+file:
+  upload-dir: uploads/
+
+eureka:
+  client:
+    enabled: false
+
+
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs   # was /api/v3/api-docs

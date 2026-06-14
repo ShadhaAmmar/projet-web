@@ -1,0 +1,456 @@
+spring:
+  application:
+    name: Gateway
+  cloud:
+    discovery:
+      enabled: true
+    loadbalancer:
+      eureka:
+        approximate-zone-from-hostname: true
+      zone:  ${eureka.instance.metadata-map.zone}
+
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "http://localhost:4200"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
+      discovery:
+        locator:
+          enabled: true
+      httpclient:
+        connect-timeout: 5000
+        response-timeout: 30s
+        wiretap: false
+      httpserver:
+        wiretap: false
+      metrics:
+        enabled: true
+        tags:
+          path:
+            enabled: true
+      loadbalancer:
+        use404: false
+      routes:
+        # ─── CORE SERVICE ROUTES ───────────────────────────────────────────────
+        - id: research-public
+          uri: lb://CORE-SERVICE
+          predicates:
+            - Path=/api/public/**
+          filters:
+            - TokenRelay=
+            - name: CircuitBreaker
+              args:
+                name: researchCB
+                fallbackUri: forward:/fallback/research
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+
+        - id: research-user
+          uri: lb://CORE-SERVICE
+          predicates:
+            - Path=/api/user/**
+          filters:
+            - TokenRelay=
+            - name: CircuitBreaker
+              args:
+                name: researchCB
+                fallbackUri: forward:/fallback/research
+
+        - id: research-moderateur
+          uri: lb://CORE-SERVICE
+          predicates:
+            - Path=/api/moderateur/**
+          filters:
+            - TokenRelay=
+            - name: CircuitBreaker
+              args:
+                name: researchCB
+                fallbackUri: forward:/fallback/research
+
+        - id: research-admin
+          uri: lb://CORE-SERVICE
+          predicates:
+            - Path=/api/admin/**
+          filters:
+            - TokenRelay=
+            - name: CircuitBreaker
+              args:
+                name: researchCB
+                fallbackUri: forward:/fallback/research
+
+        - id: research-files
+          uri: lb://CORE-SERVICE
+          predicates:
+            - Path=/api/files/**
+          filters:
+            - TokenRelay=
+            - name: CircuitBreaker
+              args:
+                name: researchCB
+                fallbackUri: forward:/fallback/research
+
+        # ─── AUTH SERVICE ROUTES ──────────────────────────────────────────────
+
+        # Public: user self-registration (no token needed)
+        - id: auth-register
+          uri: lb://AUTHORIZATIONSERVICE
+          predicates:
+            - Path=/api/v1/users/register
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: authCB
+                fallbackUri: forward:/fallback/auth
+
+        # Public: login + refresh (OAuth2 tokens issued here, no Bearer needed)
+        - id: auth-login
+          uri: lb://AUTHORIZATIONSERVICE
+          predicates:
+            - Path=/api/v1/auth/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: authCB
+                fallbackUri: forward:/fallback/auth
+
+        # Admin-only: user creation, role/authority/client management
+        - id: auth-admin-users
+          uri: lb://AUTHORIZATIONSERVICE
+          predicates:
+            - Path=/api/v1/users/**
+          filters:
+            - TokenRelay=
+            - name: CircuitBreaker
+              args:
+                name: authCB
+                fallbackUri: forward:/fallback/auth
+
+        - id: auth-admin-roles
+          uri: lb://AUTHORIZATIONSERVICE
+          predicates:
+            - Path=/api/v1/roles/**
+          filters:
+            - TokenRelay=
+            - name: CircuitBreaker
+              args:
+                name: authCB
+                fallbackUri: forward:/fallback/auth
+
+        - id: auth-admin-authorities
+          uri: lb://AUTHORIZATIONSERVICE
+          predicates:
+            - Path=/api/v1/authorities/**
+          filters:
+            - TokenRelay=
+            - name: CircuitBreaker
+              args:
+                name: authCB
+                fallbackUri: forward:/fallback/auth
+
+        - id: auth-server-oauth2
+          uri: lb://AUTHORIZATIONSERVICE
+          predicates:
+            - Path=/oauth2/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: authCB
+                fallbackUri: forward:/fallback/auth
+
+        - id: auth-server-login
+          uri: lb://AUTHORIZATIONSERVICE
+          predicates:
+            - Path=/login/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: authCB
+                fallbackUri: forward:/fallback/auth
+
+        - id: auth-admin-clients
+          uri: lb://AUTHORIZATIONSERVICE
+          predicates:
+            - Path=/api/v1/clients/**
+          filters:
+            - TokenRelay=
+            - name: CircuitBreaker
+              args:
+                name: authCB
+                fallbackUri: forward:/fallback/auth
+
+        # ─── SWAGGER / API DOCS ROUTES ────────────────────────────────────────
+        - id: core-service-docs
+          uri: lb://CORE-SERVICE
+          predicates:
+            - Path=/core-service/v3/api-docs
+          filters:
+            - RewritePath=/core-service/v3/api-docs, /v3/api-docs
+
+        - id: auth-service-docs
+          uri: lb://AUTHORIZATIONSERVICE
+          predicates:
+            - Path=/auth-service/v3/api-docs
+          filters:
+            - RewritePath=/auth-service/v3/api-docs, /v3/api-docs
+
+        # ─── AI SERVICE ROUTES ────────────────────────────────────────────────
+        - id: ai-service
+          uri: lb://ai-service
+          predicates:
+            - Path=/ai/**
+          filters:
+            - StripPrefix=0
+
+    circuitbreaker:
+      resilience4j:
+        enabled: true
+        disable-time-limiter: false
+        enable-semaphore-default-bulkhead: true
+      bulkhead:
+        resilience4j:
+          enabled: true
+
+
+
+# ============================================
+# RESOURCE SERVER CONFIGURATION
+# ============================================
+
+  security:
+    oauth2:
+      client:
+        registration:
+          gateway:
+            provider: auth-server
+            client-id: gatewayservice-QGRiX424PE_LPZlC-CcURA
+            client-secret: AimpZwDKNi8AqDBHwbaKUc2M5aYIeFSDwzB72iAnEQI
+            authorization-grant-type: authorization_code
+            redirect-uri: "http://localhost:8080/login/oauth2/code/gateway"
+            scope: openid, profile
+        provider:
+          auth-server:
+            authorization-uri: http://localhost:9000/oauth2/authorize
+            token-uri: http://localhost:9000/oauth2/token
+            jwk-set-uri: http://localhost:9000/oauth2/jwks
+            user-info-uri: http://localhost:9000/userinfo
+            user-name-attribute: sub
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:9000/oauth2/jwks
+
+
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: gateway, health, info, circuitbreakers, circuitbreakerevents
+      base-path: /actuator
+
+  endpoint:
+    gateway:
+      access: read_only
+
+
+
+# ============================================================================
+# RESILIENCE4J CIRCUIT BREAKER CONFIGURATION
+# ============================================================================
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        register-health-indicator: true
+        sliding-window-size: 100
+        minimum-number-of-calls: 10
+        permitted-number-of-calls-in-half-open-state: 5
+        wait-duration-in-open-state:
+          seconds: 60
+        failure-rate-threshold: 50
+        event-consumer-buffer-size: 10
+        sliding-window-type: count_based
+        slow-call-duration-threshold:
+          seconds: 60
+        slow-call-rate-threshold: 100
+        automatic-transition-from-open-to-half-open-enabled: true
+      critical:
+        register-health-indicator: true
+        sliding-window-size: 50
+        minimum-number-of-calls: 5
+        permitted-number-of-calls-in-half-open-state: 3
+        wait-duration-in-open-state:
+          seconds: 30
+        failure-rate-threshold: 30
+        event-consumer-buffer-size: 20
+        slow-call-duration-threshold:
+          seconds: 60
+        slow-call-rate-threshold: 50
+        sliding-window-type: count_based
+        automatic-transition-from-open-to-half-open-enabled: true
+      lenient:
+        register-health-indicator: true
+        sliding-window-size: 200
+        minimum-number-of-calls: 50
+        permitted-number-of-calls-in-half-open-state: 10
+        wait-duration-in-open-state:
+          seconds: 120
+        failure-rate-threshold: 70
+        event-consumer-buffer-size: 10
+        slow-call-duration-threshold:
+          seconds: 60
+        sliding-window-type: count_based
+        automatic-transition-from-open-to-half-open-enabled: true
+
+        #instances:
+        #service:
+        #base-config: default
+        #sliding-window-size: 80
+
+
+  # ============================================================================
+  # RESILIENCE4J TIME LIMITER CONFIGURATION
+  # ============================================================================
+  # TimeLimiter: Sets max time to wait for a response before timeout
+  timelimiter:
+    configs:
+      default:
+        timeout-duration:
+          seconds: 5
+        cancel-running-future: true
+      fast:
+        timeout-duration:
+          seconds: 2
+        cancel-running-future: true
+      batch:
+        timeout-duration:
+          seconds: 30
+        cancel-running-future: false
+    instances:
+      slow-external-api:
+        timeout-duration:
+          seconds:  60s
+        cancel-running-future: false
+
+
+  # ============================================================================
+  # RESILIENCE4J BULKHEAD CONFIGURATION (Semaphore for Reactive)
+  # ============================================================================
+  # Bulkhead: Limits concurrent calls to prevent overwhelming service/resources
+  bulkhead:
+    configs:
+      default:
+        max-concurrent-calls: 25
+        max-wait-duration:
+          seconds: 0
+      conservative:
+        max-concurrent-calls: 10
+        max-wait-duration:
+          seconds: 0.1
+      generous:
+        max-concurrent-calls: 100
+        max-wait-duration:
+          seconds: 0
+
+    instances:
+      slow-external-api:
+        baseConfig: generous
+        maxConcurrentCalls: 20
+
+
+server:
+  shutdown: graceful
+  port: 8080
+  netty:
+    connection-timeout: 30s
+    idle-timeout: 60s
+  forward-headers-strategy: framework
+
+# ============================================
+# EUREKA CLIENT CONFIGURATION
+# ============================================
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://user:password@localhost:8761/eureka/
+    enabled: true
+    register-with-eureka: true
+    fetch-registry: true
+    registry-fetch-interval-seconds: 10
+    disable-delta: false
+    healthcheck:
+      enabled: true
+    refresh:
+      enable: true
+    region: us-east-1
+    availability-zones:
+      us-east-1: zone1, zone2
+    prefer-same-zone-eureka: true
+    webclient:
+      enabled: false
+    timeout:
+      connect-timeout: 5000
+      connect-request-timeout: 8000
+      socket-timeout: 10000
+
+    eureka-server-connect-timeout-seconds: 5
+    eureka-server-read-timeout-seconds: 8
+    eureka-server-total-connections: 200
+    eureka-server-total-connections-per-host: 50
+    eureka-connection-idle-timeout-seconds: 30
+    filter-only-up-instances: true
+    log-delta-diff: true
+    g-zip-content: true
+  instance:
+    hostname: localhost
+    ip-address: 127.0.0.1
+    prefer-ip-address: false
+    non-secure-port: 8080
+    non-secure-port-enabled: true
+    secure-port: 8080
+    secure-port-enabled: false
+    status-page-url: http://${eureka.instance.hostname}:${eureka.instance.secure-port}/actuator/info
+    health-check-url: http://${eureka.instance.hostname}:${eureka.instance.secure-port}/actuator/health
+    home-page-url: http://${eureka.instance.hostname}:${eureka.instance.secure-port}/
+    lease-renewal-interval-in-seconds: 10
+    lease-expiration-duration-in-seconds: 60
+    metadata-map:
+      zone: zone1
+      version: 1.0.0
+      profile: dev
+    initial-status: UP
+
+
+# ============================================
+# RESOURCE SERVER CONFIGURATION
+# ============================================
+
+keySetURI: http://AuthorizationService/oauth2/jwks
+introspectionUri: http://AuthorizationService/oauth2/introspect
+
+# gateway application.yml
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: Core Service
+        url: /core-service/v3/api-docs
+      - name: Authorization Service
+        url: /auth-service/v3/api-docs
+  api-docs:
+    enabled: true
+

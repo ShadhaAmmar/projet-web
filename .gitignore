@@ -1,0 +1,37 @@
+# IDEs and Editors
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# Build directories
+target/
+build/
+out/
+.mvn/wrapper/maven-wrapper.jar
+
+# Python caching and environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+ENV/
+env/
+
+# Environment and sensitive data
+ai-service/.env
+.env
+.env.local
+.env.*.local
+*.log
+
+# User uploads and temporary files
+core-service/uploads/
+uploads/
+
+# OS files
+.DS_Store
+Thumbs.db

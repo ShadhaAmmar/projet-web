@@ -1,0 +1,26 @@
+# Install CPU-only PyTorch FIRST to prevent pip from pulling the huge CUDA version
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+
+# Core API
+fastapi
+uvicorn[standard]
+orjson
+
+# AI / ML
+sentence-transformers
+keybert
+chromadb
+
+# Spring Cloud / HTTP
+py-eureka-client
+httpx
+
+# Config & validation
+pydantic
+pydantic-settings
+python-dotenv
+
+# PDF & File Uploads
+pymupdf>=1.23.0
+python-multipart
